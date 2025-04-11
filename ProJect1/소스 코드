@@ -1,0 +1,113 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+import random
+
+# 환경 설정
+GRID_SIZE = 50         # 격자 크기
+NUM_AGENTS = 20        # 초기 에이전트 수
+RESOURCE_PROB = 0.05   # 각 셀에 자원이 존재할 확률 (초기)
+NEW_RESOURCE_RATE = 0.01  # 매 스텝마다 자원이 생성될 확률
+ENERGY_GAIN = 20       # 자원 섭취 시 에너지 증가량
+ENERGY_COST = 1        # 매 이동마다 에너지 소모량
+REPRODUCTION_THRESHOLD = 50  # 번식하기 위한 최소 에너지
+REPRODUCTION_COST = 25       # 번식 시 에너지 소모
+
+# 에이전트 클래스 정의
+class Agent:
+    def __init__(self, x, y, energy=30):
+        self.x = x
+        self.y = y
+        self.energy = energy
+
+    def move(self):
+        # 상하좌우 또는 대각선 이동 (격자 범위 내)
+        dx = random.choice([-1, 0, 1])
+        dy = random.choice([-1, 0, 1])
+        new_x = (self.x + dx) % GRID_SIZE
+        new_y = (self.y + dy) % GRID_SIZE
+        self.x, self.y = new_x, new_y
+        self.energy -= ENERGY_COST  # 이동 시 에너지 소모
+
+    def try_eat(self, resource_grid):
+        # 자원이 있는 셀이면 섭취
+        if resource_grid[self.x, self.y]:
+            self.energy += ENERGY_GAIN
+            resource_grid[self.x, self.y] = 0
+
+    def can_reproduce(self):
+        return self.energy >= REPRODUCTION_THRESHOLD
+
+    def reproduce(self):
+        # 번식 시 자식은 부모와 동일 위치에서 태어나며, 에너지가 절반씩 분배됨
+        self.energy -= REPRODUCTION_COST
+        child = Agent(self.x, self.y, energy=REPRODUCTION_COST)
+        return child
+
+# 초기 자원 격자 생성 (0: 자원 없음, 1: 자원 있음)
+def init_resource_grid():
+    grid = np.zeros((GRID_SIZE, GRID_SIZE), dtype=int)
+    for i in range(GRID_SIZE):
+        for j in range(GRID_SIZE):
+            if random.random() < RESOURCE_PROB:
+                grid[i, j] = 1
+    return grid
+
+# 시뮬레이션 초기화
+agents = [Agent(random.randrange(GRID_SIZE), random.randrange(GRID_SIZE)) for _ in range(NUM_AGENTS)]
+resource_grid = init_resource_grid()
+
+# 시각화를 위한 figure와 축 생성
+fig, ax = plt.subplots(figsize=(6, 6))
+plt.title("자율 AI 에코시스템 시뮬레이션")
+
+# 초기 산점도: 자원과 에이전트
+resource_scatter = ax.scatter([], [], c='green', marker='s', s=100, label="Resource")
+agent_scatter = ax.scatter([], [], c='blue', marker='o', s=50, label="Agent")
+ax.set_xlim(0, GRID_SIZE)
+ax.set_ylim(0, GRID_SIZE)
+ax.set_xticks([])
+ax.set_yticks([])
+ax.legend(loc='upper right')
+
+def update(frame):
+    global agents, resource_grid
+    new_agents = []
+    
+    # 에이전트 처리: 이동, 자원 섭취, 번식
+    for agent in agents:
+        agent.move()
+        agent.try_eat(resource_grid)
+        # 번식 조건 충족 시 자식 생성
+        if agent.can_reproduce() and random.random() < 0.1:  # 번식 확률 추가
+            child = agent.reproduce()
+            new_agents.append(child)
+    agents.extend(new_agents)
+    
+    # 에이전트 에너지 소진 체크: 에너지가 0 이하이면 제거
+    agents = [agent for agent in agents if agent.energy > 0]
+
+    # 매 스텝마다 새로운 자원이 소량 생성
+    for i in range(GRID_SIZE):
+        for j in range(GRID_SIZE):
+            if resource_grid[i, j] == 0 and random.random() < NEW_RESOURCE_RATE:
+                resource_grid[i, j] = 1
+
+    # 시각화 업데이트: 자원과 에이전트 위치 표시
+    resource_positions = np.argwhere(resource_grid == 1)
+    if len(resource_positions) > 0:
+        resource_scatter.set_offsets(resource_positions)
+    else:
+        resource_scatter.set_offsets([])
+
+    agent_positions = np.array([[agent.x, agent.y] for agent in agents])
+    if len(agent_positions) > 0:
+        agent_scatter.set_offsets(agent_positions)
+    else:
+        agent_scatter.set_offsets([])
+
+    ax.set_title(f"스텝: {frame} | 에이전트 수: {len(agents)}")
+    return resource_scatter, agent_scatter
+
+ani = animation.FuncAnimation(fig, update, frames=200, interval=200, blit=True)
+plt.show()
